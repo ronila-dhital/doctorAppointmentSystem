@@ -1,31 +1,37 @@
 <?php
-include("../db_connection.php");
+
+error_reporting(E_ALL);
+ini_set("display_errors", 1);
+
+include "../db_connection.php";
 session_start();
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $name           = trim($_POST['name']);
-    $email          = trim($_POST['email']);
-    $password       = $_POST['password'];
-    $specialization = trim($_POST['specialization']);
-    $otherSpec      = trim($_POST['other_specialization']);
-    $experience     = intval($_POST['experience']);
-    $available_from = $_POST['available_from'];
-    $available_to = $_POST['available_to'];
+    $name = trim($_POST["name"]);
+    $email = trim($_POST["email"]);
+    $password = $_POST["password"];
+    $specialization = trim($_POST["specialization"]);
+    $otherSpec = trim($_POST["other_specialization"]);
+    $experience = intval($_POST["experience"]);
+    $available_from = $_POST["available_from"];
+    $available_to = $_POST["available_to"];
+    $status = "pending";
 
     $days = "";
-        if (isset($_POST['available_days'])) {
-            $days = implode(",", $_POST['available_days']);
-        }
+    if (isset($_POST["available_days"])) {
+        $days = implode(",", $_POST["available_days"]);
+    }
 
     if (!empty($otherSpec)) {
         $specialization = $otherSpec;
     }
 
     if (!preg_match("/^[a-zA-Z]+(?:\s+[a-zA-Z]+)+$/", $name)) {
-        $error = "Please enter a valid full name using only letters (e.g. First Last).";
+        $error = "Please enter a valid full name (First Last).";
     } else {
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
+        // 📸 Upload Image
         $targetDir = "../uploads/doctors/";
         if (!is_dir($targetDir)) {
             mkdir($targetDir, 0777, true);
@@ -34,40 +40,48 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $fileName = basename($_FILES["profile_pic"]["name"]);
         $targetFilePath = $targetDir . time() . "_" . $fileName;
         $fileType = strtolower(pathinfo($targetFilePath, PATHINFO_EXTENSION));
-        $allowedTypes = array("jpg","jpeg","png","gif");
+        $allowedTypes = ["jpg", "jpeg", "png", "gif"];
 
         if (in_array($fileType, $allowedTypes)) {
-            if (move_uploaded_file($_FILES["profile_pic"]["tmp_name"], $targetFilePath)) {
-               $stmt = $mysqli->prepare("INSERT INTO doctor 
-    (name, email, password, specialization, profile_pic, experience, available_from, available_to, available_days) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            if (
+                move_uploaded_file(
+                    $_FILES["profile_pic"]["tmp_name"],
+                    $targetFilePath,
+                )
+            ) {
+                // ✅ INSERT WITH STATUS
+                $stmt = $mysqli->prepare("INSERT INTO doctor
+                (name, email, password, specialization, profile_pic, experience, available_from, available_to, available_days, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-$stmt->bind_param(
-'sssssisss',
-$name,
-$email,
-$hashedPassword,
-$specialization,
-$targetFilePath,
-$experience,
-$available_from,
-$available_to,
-$days
-);
+                $stmt->bind_param(
+                    "ssssssssss",
+                    $name,
+                    $email,
+                    $hashedPassword,
+                    $specialization,
+                    $targetFilePath,
+                    $experience,
+                    $available_from,
+                    $available_to,
+                    $days,
+                    $status,
+                );
 
                 if ($stmt->execute()) {
-                    $_SESSION['doctor_id'] = $stmt->insert_id;
+                    $_SESSION["doctor_id"] = $stmt->insert_id;
                     header("Location: doctordashboard.php");
                     exit();
                 } else {
-                    $error = "Registration failed: " . $mysqli->error;
+                    $error = "Registration failed: " . $stmt->error;
                 }
+
                 $stmt->close();
             } else {
-                $error = "❌ Failed to upload profile picture.";
+                $error = "❌ Image upload failed.";
             }
         } else {
-            $error = "❌ Only JPG, JPEG, PNG, GIF files are allowed.";
+            $error = "❌ Only JPG, JPEG, PNG, GIF allowed.";
         }
     }
 }
@@ -141,7 +155,9 @@ $days
 <body>
     <div class="form-box">
         <h2>Doctor Registration</h2>
-        <?php if (isset($error)) echo "<p class='error'>$error</p>"; ?>
+        <?php if (isset($error)) {
+            echo "<p class='error'>$error</p>";
+        } ?>
         <form method="POST" enctype="multipart/form-data">
             <label>Full Name</label>
             <input type="text" name="name" placeholder="Full Name" required>
@@ -152,7 +168,7 @@ $days
             <label>Password</label>
 <div style="position:relative;">
     <input type="password" id="password" name="password" placeholder="Password" required>
-    <span onclick="togglePassword()" 
+    <span onclick="togglePassword()"
           style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; color:#0b3d91; font-weight:bold;">
         👁
     </span>

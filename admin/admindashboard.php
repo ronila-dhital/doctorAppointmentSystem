@@ -1,42 +1,91 @@
 <?php
-include("../db_connection.php");
+include "../db_connection.php";
 session_start();
 
-if (!isset($_SESSION['admin_id'])) {
+if (!isset($_SESSION["admin_id"])) {
     header("Location: adminlogin.php");
     exit();
 }
 
 $message = "";
 
-/* Doctor CRUD */
-if(isset($_POST['delete_doctor'])){
+if (isset($_POST["approve_doctor"])) {
+    $stmt = $mysqli->prepare("UPDATE doctor SET status='approved' WHERE id=?");
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
+    $message = "Doctor Approved!";
+}
+
+if (isset($_POST["reject_doctor"])) {
     $stmt = $mysqli->prepare("DELETE FROM doctor WHERE id=?");
-    $stmt->bind_param("i", $_POST['id']);
-    $stmt->execute(); $stmt->close();
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
+    $message = "Doctor Rejected & Deleted!";
+}
+
+if (isset($_POST["approve_patient"])) {
+    $stmt = $mysqli->prepare("UPDATE patient SET status='approved' WHERE id=?");
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
+    $message = "Patient Approved!";
+}
+
+if (isset($_POST["reject_patient"])) {
+    $stmt = $mysqli->prepare("DELETE FROM patient WHERE id=?");
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
+    $message = "Patient Rejected & Deleted!";
+}
+
+/* Doctor CRUD */
+if (isset($_POST["delete_doctor"])) {
+    $stmt = $mysqli->prepare("DELETE FROM doctor WHERE id=?");
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
     $message = "✅ Doctor deleted!";
 }
 
 /* Patient CRUD */
-if(isset($_POST['delete_patient'])){
+if (isset($_POST["delete_patient"])) {
     $stmt = $mysqli->prepare("DELETE FROM patient WHERE id=?");
-    $stmt->bind_param("i", $_POST['id']);
-    $stmt->execute(); $stmt->close();
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
     $message = "✅ Patient deleted!";
 }
 
 /* Appointment CRUD */
-if(isset($_POST['delete_appointment'])){
+if (isset($_POST["delete_appointment"])) {
     $stmt = $mysqli->prepare("DELETE FROM appointment WHERE id=?");
-    $stmt->bind_param("i", $_POST['id']);
-    $stmt->execute(); $stmt->close();
+    $stmt->bind_param("i", $_POST["id"]);
+    $stmt->execute();
+    $stmt->close();
     $message = "✅ Appointment deleted!";
 }
 
 /* Counts */
-$doctorCount = $mysqli->query("SELECT COUNT(*) AS c FROM doctor")->fetch_assoc()['c'];
-$patientCount = $mysqli->query("SELECT COUNT(*) AS c FROM patient")->fetch_assoc()['c'];
-$appointmentCount = $mysqli->query("SELECT COUNT(*) AS c FROM appointment")->fetch_assoc()['c'];
+$doctorCount = $mysqli
+    ->query("SELECT COUNT(*) AS c FROM doctor")
+    ->fetch_assoc()["c"];
+$patientCount = $mysqli
+    ->query("SELECT COUNT(*) AS c FROM patient")
+    ->fetch_assoc()["c"];
+$appointmentCount = $mysqli
+    ->query("SELECT COUNT(*) AS c FROM appointment")
+    ->fetch_assoc()["c"];
+$pendingDoctorCount = $mysqli
+    ->query("SELECT COUNT(*) AS c FROM doctor WHERE status='pending'")
+    ->fetch_assoc()["c"];
+$pendingPatientCount = $mysqli
+    ->query("SELECT COUNT(*) AS c FROM patient WHERE status='pending'")
+    ->fetch_assoc()["c"];
+
+$pendingCount = $pendingDoctorCount + $pendingPatientCount;
 
 /* Data */
 $doctors = $mysqli->query("SELECT * FROM doctor ORDER BY name ASC");
@@ -70,18 +119,22 @@ $appointments = $mysqli->query("SELECT a.id, p.name AS patient_name, d.name AS d
 </head>
 <body>
     <header>
-        <h2>Welcome, <?php echo $_SESSION['admin_name']; ?> 👑</h2>
+        <h2>Welcome, <?php echo $_SESSION["admin_name"]; ?> 👑</h2>
         <a href="adminlogout.php" class="logout">Logout</a>
     </header>
 
     <div class="container">
-        <?php if(!empty($message)): ?><div class="message"><?php echo $message; ?></div><?php endif; ?>
+        <?php if (
+            !empty($message)
+        ): ?><div class="message"><?php echo $message; ?></div><?php endif; ?>
 
         <!-- Summary Cards -->
         <div class="summary">
             <div class="card"><h3>Doctors</h3><p><?php echo $doctorCount; ?></p></div>
             <div class="card"><h3>Patients</h3><p><?php echo $patientCount; ?></p></div>
             <div class="card"><h3>Appointments</h3><p><?php echo $appointmentCount; ?></p></div>
+            <div class="card"><h3>Pending</h3><p><?php echo $pendingCount; ?></p></div>
+
         </div>
 
         <!-- Doctor Management (View + Delete only) -->
@@ -89,18 +142,40 @@ $appointments = $mysqli->query("SELECT a.id, p.name AS patient_name, d.name AS d
             <h3>Doctors</h3>
             <table>
                 <tr><th>ID</th><th>Name</th><th>Specialization</th><th>Experience</th><th>Profile Pic</th><th>Actions</th></tr>
-                <?php while($row = $doctors->fetch_assoc()): ?>
+                <?php while ($row = $doctors->fetch_assoc()): ?>
                 <tr>
-                    <td><?= $row['id'] ?></td>
-                    <td><?= $row['name'] ?></td>
-                    <td><?= $row['specialization'] ?></td>
-                    <td><?= $row['experience'] ?> years</td>
-                    <td><img src="<?= $row['profile_pic'] ?>" width="50"></td>
+                    <td><?= $row["id"] ?></td>
+                    <td><?= $row["name"] ?></td>
+                    <td><?= $row["specialization"] ?></td>
+                    <td><?= $row["experience"] ?> years</td>
+                    <td><img src="<?= $row["profile_pic"] ?>" width="50"></td>
                     <td>
-                        <form method="POST" style="display:inline;">
-                            <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                            <button type="submit" name="delete_doctor">Delete</button>
-                        </form>
+                        <?php if ($row["status"] == "pending"): ?>
+
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="id" value="<?= $row[
+                                    "id"
+                                ] ?>">
+                                <button type="submit" name="approve_doctor">Approve</button>
+                            </form>
+
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="id" value="<?= $row[
+                                    "id"
+                                ] ?>">
+                                <button type="submit" name="reject_doctor" style="background:red;">Reject</button>
+                            </form>
+
+                        <?php else: ?>
+
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="id" value="<?= $row[
+                                    "id"
+                                ] ?>">
+                                <button type="submit" name="delete_doctor">Delete</button>
+                            </form>
+
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endwhile; ?>
@@ -112,16 +187,38 @@ $appointments = $mysqli->query("SELECT a.id, p.name AS patient_name, d.name AS d
             <h3>Patients</h3>
             <table>
                 <tr><th>ID</th><th>Name</th><th>Email</th><th>Actions</th></tr>
-                <?php while($row = $patients->fetch_assoc()): ?>
+                <?php while ($row = $patients->fetch_assoc()): ?>
                 <tr>
-                    <td><?= $row['id'] ?></td>
-                    <td><?= $row['name'] ?></td>
-                    <td><?= $row['email'] ?></td>
+                    <td><?= $row["id"] ?></td>
+                    <td><?= $row["name"] ?></td>
+                    <td><?= $row["email"] ?></td>
                     <td>
-                        <form method="POST" style="display:inline;">
-                            <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                            <button type="submit" name="delete_patient">Delete</button>
-                        </form>
+                        <?php if ($row["status"] == "pending"): ?>
+
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="id" value="<?= $row[
+                                    "id"
+                                ] ?>">
+                                <button type="submit" name="approve_patient">Approve</button>
+                            </form>
+
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="id" value="<?= $row[
+                                    "id"
+                                ] ?>">
+                                <button type="submit" name="reject_patient" style="background:red;">Reject</button>
+                            </form>
+
+                        <?php else: ?>
+
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="id" value="<?= $row[
+                                    "id"
+                                ] ?>">
+                                <button type="submit" name="delete_patient">Delete</button>
+                            </form>
+
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endwhile; ?>
@@ -133,18 +230,20 @@ $appointments = $mysqli->query("SELECT a.id, p.name AS patient_name, d.name AS d
             <h3>Appointments</h3>
             <table>
                 <tr><th>ID</th><th>Patient</th><th>Doctor</th><th>Date</th><th>Time</th><th>Description</th><th>Status</th><th>Actions</th></tr>
-                <?php while($row = $appointments->fetch_assoc()): ?>
+                <?php while ($row = $appointments->fetch_assoc()): ?>
                 <tr>
-                    <td><?= $row['id'] ?></td>
-                    <td><?= $row['patient_name'] ?></td>
-                    <td><?= $row['doctor_name'] ?></td>
-                    <td><?= $row['appointment_date'] ?></td>
-                    <td><?= $row['appointment_time'] ?></td>
-                    <td><?= $row['description'] ?></td>
-                    <td><?= $row['status'] ?></td>
+                    <td><?= $row["id"] ?></td>
+                    <td><?= $row["patient_name"] ?></td>
+                    <td><?= $row["doctor_name"] ?></td>
+                    <td><?= $row["appointment_date"] ?></td>
+                    <td><?= $row["appointment_time"] ?></td>
+                    <td><?= $row["description"] ?></td>
+                    <td><?= $row["status"] ?></td>
                     <td>
                         <form method="POST" style="display:inline;">
-                            <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                            <input type="hidden" name="id" value="<?= $row[
+                                "id"
+                            ] ?>">
                             <button type="submit" name="delete_appointment">Delete</button>
                         </form>
                     </td>
